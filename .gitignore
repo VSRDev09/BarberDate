@@ -1,0 +1,43 @@
+# --- SEGURANÇA E AMBIENTE ---
+.env
+.env.local
+.env.*.local
+
+# --- LOGS ---
+*.log
+spring-error.log
+spring.log
+vite.log
+
+# --- NODE / FRONTEND ---
+node_modules/
+dist/
+dist-ssr/
+.eslintcache
+.stylelintcache
+
+# --- JAVA / SPRING ---
+target/
+build/
+out/
+*.class
+
+# --- MAVEN WRAPPER ---
+!.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.properties
+
+# --- IDEs ---
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- DOCKER ---
+.docker/
