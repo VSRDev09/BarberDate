@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { AdminSidebar } from '../components/admin/AdminSidebar.jsx'
@@ -54,19 +54,32 @@ export function AdminLayout() {
       </div>
 
       {sidebarOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/75 px-4 py-5 backdrop-blur-md lg:hidden">
-          <div className="mx-auto h-full max-w-sm">
-            <AdminSidebar adminName={admin?.name ?? 'Barber'} onLogout={handleLogout} />
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(false)}
-              className="premium-button premium-button-secondary mt-4 w-full"
-            >
-              Fechar menu
-            </button>
-          </div>
-        </div>
-      ) : null}
+  <div
+    className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md lg:hidden"
+    onClick={() => setSidebarOpen(false)}
+  >
+    <div className="flex h-full">
+      <div
+        className="relative h-full w-[85%] max-w-sm p-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(false)}
+          className="absolute right-7 top-7 z-10 rounded-xl border border-white/10 bg-white/5 p-2 text-white/70"
+          aria-label="Fechar menu"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <AdminSidebar
+          adminName={admin?.name ?? 'Barber'}
+          onLogout={handleLogout}
+        />
+      </div>
+    </div>
+  </div>
+) : null}
     </div>
   )
 }
