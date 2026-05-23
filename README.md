@@ -1,6 +1,6 @@
 # Barber Date
 
-Sistema fullstack de agendamento para uma barbearia premium, desenvolvido com foco em experiência moderna, organização operacional e gerenciamento eficiente da agenda semanal.
+Sistema fullstack de agendamento para uma barbearia, desenvolvido com foco em experiência moderna, organização operacional e gerenciamento eficiente da agenda semanal.
 
 O projeto possui dois fluxos principais:
 
