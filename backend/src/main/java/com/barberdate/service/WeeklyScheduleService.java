@@ -38,16 +38,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WeeklyScheduleService {
 
-    private static final Comparator<WeeklySchedule> WEEKDAY_COMPARATOR =
-        Comparator.comparingInt(schedule -> schedule.getDayOfWeek().getValue());
+    private static final Comparator<WeeklySchedule> WEEKDAY_COMPARATOR = Comparator
+            .comparingInt(schedule -> schedule.getDayOfWeek().getValue());
 
     private final WeeklyScheduleRepository weeklyScheduleRepository;
     private final AppointmentRepository appointmentRepository;
 
     public WeeklyScheduleService(
-        WeeklyScheduleRepository weeklyScheduleRepository,
-        AppointmentRepository appointmentRepository
-    ) {
+            WeeklyScheduleRepository weeklyScheduleRepository,
+            AppointmentRepository appointmentRepository) {
         this.weeklyScheduleRepository = weeklyScheduleRepository;
         this.appointmentRepository = appointmentRepository;
     }
@@ -62,8 +61,8 @@ public class WeeklyScheduleService {
 
         List<WeeklySchedule> templates = loadPreviousWeekTemplates(weekStart);
         List<WeeklySchedule> baseSchedules = templates.isEmpty()
-            ? buildDefaultSchedules(weekStart)
-            : cloneSchedules(templates, weekStart);
+                ? buildDefaultSchedules(weekStart)
+                : cloneSchedules(templates, weekStart);
 
         List<WeeklySchedule> savedSchedules = sortSchedules(weeklyScheduleRepository.saveAll(baseSchedules));
         savedSchedules.forEach(schedule -> regenerateSlots(schedule, Map.of()));
@@ -93,7 +92,8 @@ public class WeeklyScheduleService {
 
     @Transactional(readOnly = true)
     public boolean isWeekReleased(Collection<WeeklySchedule> schedules) {
-        return !schedules.isEmpty() && schedules.stream().allMatch(schedule -> Boolean.TRUE.equals(schedule.getReleased()));
+        return !schedules.isEmpty()
+                && schedules.stream().allMatch(schedule -> Boolean.TRUE.equals(schedule.getReleased()));
     }
 
     @Transactional
@@ -109,34 +109,54 @@ public class WeeklyScheduleService {
         DayOfWeek dayOfWeek = parseDayOfWeek(request.dayOfWeek());
         LocalTime startHour = LocalTime.parse(request.startHour());
         LocalTime endHour = LocalTime.parse(request.endHour());
+        boolean isDayOff = Boolean.TRUE.equals(request.dayOff());
 
-        validateHourlyRange(startHour, endHour);
+        if (!isDayOff) {
+            validateHourlyRange(startHour, endHour);
+        }
 
         WeeklySchedule schedule = weeklyScheduleRepository.findByWeekStartAndDayOfWeek(weekStart, dayOfWeek)
-            .orElseGet(() -> weeklyScheduleRepository.save(
-                WeeklySchedule.builder()
-                    .weekStart(weekStart)
-                    .dayOfWeek(dayOfWeek)
-                    .startHour(startHour)
-                    .endHour(endHour)
-                    .released(isWeekReleased(currentSchedules))
-                    .slots(new ArrayList<>())
-                    .build()
-            ));
+                .orElseGet(() -> weeklyScheduleRepository.save(
+                        WeeklySchedule.builder()
+                                .weekStart(weekStart)
+                                .dayOfWeek(dayOfWeek)
+                                .startHour(startHour)
+                                .endHour(endHour)
+                                .released(isWeekReleased(currentSchedules))
+                                .dayOff(false)
+                                .slots(new ArrayList<>())
+                                .build()));
 
         LocalDate dayDate = weekStart.plusDays(dayOfWeek.getValue() - 1L);
-        List<Appointment> activeAppointments = appointmentRepository.findByAppointmentDateAndStatusOrderByAppointmentTimeAsc(
-            dayDate,
-            AppointmentStatus.SCHEDULED
-        );
+        List<Appointment> activeAppointments = appointmentRepository
+                .findByAppointmentDateAndStatusOrderByAppointmentTimeAsc(
+                        dayDate,
+                        AppointmentStatus.SCHEDULED);
         Map<LocalTime, Appointment> appointmentsByTime = activeAppointments.stream()
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    Appointment::getAppointmentTime,
-                    appointment -> appointment,
-                    (left, right) -> left
-                )
-            );
+                .collect(
+                        java.util.stream.Collectors.toMap(
+                                Appointment::getAppointmentTime,
+                                appointment -> appointment,
+                                (left, right) -> left));
+        if (isDayOff) {
+
+            if (!activeAppointments.isEmpty()) {
+                throw new BusinessException(
+                        "Existem agendamentos ativos nesse dia");
+            }
+
+            schedule.setDayOff(true);
+
+            schedule.setStartHour(LocalTime.MIN);
+            schedule.setEndHour(LocalTime.MIN);
+
+            schedule.getSlots().clear();
+
+            weeklyScheduleRepository.save(schedule);
+
+            return buildAdminWeekScheduleResponse(
+                    ensureCurrentWeekSchedules());
+        }
 
         appointmentsByTime.keySet().forEach(time -> {
             if (time.isBefore(startHour) || !time.isBefore(endHour)) {
@@ -144,6 +164,7 @@ public class WeeklyScheduleService {
             }
         });
 
+        schedule.setDayOff(false);
         schedule.setStartHour(startHour);
         schedule.setEndHour(endHour);
         regenerateSlots(schedule, appointmentsByTime);
@@ -168,32 +189,29 @@ public class WeeklyScheduleService {
 
         if (!released) {
             return new ClientAgendaResponse(
-                weekStart,
-                weekEnd,
-                false,
-                "Lista de agendamento não disponibilizada pelo barbeiro",
-                services,
-                List.of()
-            );
+                    weekStart,
+                    weekEnd,
+                    false,
+                    "Lista de agendamento não disponibilizada pelo barbeiro",
+                    services,
+                    List.of());
         }
 
-        List<Appointment> activeAppointments = appointmentRepository.findByAppointmentDateBetweenAndStatusOrderByAppointmentDateAscAppointmentTimeAsc(
-            weekStart,
-            weekEnd,
-            AppointmentStatus.SCHEDULED
-        );
+        List<Appointment> activeAppointments = appointmentRepository
+                .findByAppointmentDateBetweenAndStatusOrderByAppointmentDateAscAppointmentTimeAsc(
+                        weekStart,
+                        weekEnd,
+                        AppointmentStatus.SCHEDULED);
         Map<Long, Appointment> appointmentBySlotId = activeAppointments.stream()
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    appointment -> appointment.getSlot().getId(),
-                    appointment -> appointment,
-                    (left, right) -> left
-                )
-            );
+                .collect(
+                        java.util.stream.Collectors.toMap(
+                                appointment -> appointment.getSlot().getId(),
+                                appointment -> appointment,
+                                (left, right) -> left));
 
         List<ClientAgendaDayResponse> dayResponses = schedules.stream()
-            .map(schedule -> buildClientDayResponse(schedule, appointmentBySlotId))
-            .toList();
+                .map(schedule -> buildClientDayResponse(schedule, appointmentBySlotId))
+                .toList();
 
         return new ClientAgendaResponse(weekStart, weekEnd, true, null, services, dayResponses);
     }
@@ -204,9 +222,8 @@ public class WeeklyScheduleService {
     }
 
     private ClientAgendaDayResponse buildClientDayResponse(
-        WeeklySchedule schedule,
-        Map<Long, Appointment> appointmentBySlotId
-    ) {
+            WeeklySchedule schedule,
+            Map<Long, Appointment> appointmentBySlotId) {
         List<TimeSlotResponse> availableSlots = new ArrayList<>();
         List<TimeSlotResponse> occupiedSlots = new ArrayList<>();
 
@@ -214,73 +231,70 @@ public class WeeklyScheduleService {
             Appointment appointment = appointmentBySlotId.get(slot.getId());
             if (appointment != null) {
                 occupiedSlots.add(new TimeSlotResponse(
-                    slot.getId(),
-                    slot.getStartTime(),
-                    slot.getEndTime(),
-                    "BOOKED",
-                    appointment.getClientName()
-                ));
+                        slot.getId(),
+                        slot.getStartTime(),
+                        slot.getEndTime(),
+                        "BOOKED",
+                        appointment.getClientName()));
                 return;
             }
 
             if (Boolean.TRUE.equals(slot.getAvailable()) && !isPastSlot(slot.getSlotDate(), slot.getStartTime())) {
                 availableSlots.add(new TimeSlotResponse(
-                    slot.getId(),
-                    slot.getStartTime(),
-                    slot.getEndTime(),
-                    "AVAILABLE",
-                    null
-                ));
+                        slot.getId(),
+                        slot.getStartTime(),
+                        slot.getEndTime(),
+                        "AVAILABLE",
+                        null));
             }
         });
 
         return new ClientAgendaDayResponse(
-            schedule.getDayOfWeek().name(),
-            resolveDayDate(schedule),
-            schedule.getStartHour(),
-            schedule.getEndHour(),
-            availableSlots,
-            occupiedSlots
-        );
+                schedule.getDayOfWeek().name(),
+                resolveDayDate(schedule),
+                schedule.getStartHour(),
+                schedule.getEndHour(),
+                Boolean.TRUE.equals(schedule.getDayOff()),
+                availableSlots,
+                occupiedSlots);
     }
 
     private AdminWeekScheduleResponse buildAdminWeekScheduleResponse(List<WeeklySchedule> schedules) {
         LocalDate weekStart = getCurrentWeekStart();
         LocalDate weekEnd = getWeekEnd(weekStart);
-        List<Appointment> activeAppointments = appointmentRepository.findByAppointmentDateBetweenAndStatusOrderByAppointmentDateAscAppointmentTimeAsc(
-            weekStart,
-            weekEnd,
-            AppointmentStatus.SCHEDULED
-        );
+        List<Appointment> activeAppointments = appointmentRepository
+                .findByAppointmentDateBetweenAndStatusOrderByAppointmentDateAscAppointmentTimeAsc(
+                        weekStart,
+                        weekEnd,
+                        AppointmentStatus.SCHEDULED);
         Map<Long, Appointment> appointmentBySlotId = activeAppointments.stream()
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    appointment -> appointment.getSlot().getId(),
-                    appointment -> appointment,
-                    (left, right) -> left
-                )
-            );
+                .collect(
+                        java.util.stream.Collectors.toMap(
+                                appointment -> appointment.getSlot().getId(),
+                                appointment -> appointment,
+                                (left, right) -> left));
 
         List<AdminScheduleDayResponse> days = schedules.stream()
-            .map(schedule -> {
-                List<AvailableTimeSlot> visibleSlots = getVisibleSlots(schedule);
-                long bookedSlots = visibleSlots.stream().filter(slot -> appointmentBySlotId.containsKey(slot.getId())).count();
-                long availableSlots = visibleSlots.stream()
-                    .filter(slot -> Boolean.TRUE.equals(slot.getAvailable()))
-                    .filter(slot -> !isPastSlot(slot.getSlotDate(), slot.getStartTime()))
-                    .count();
-                return new AdminScheduleDayResponse(
-                    schedule.getDayOfWeek().name(),
-                    resolveDayDate(schedule),
-                    schedule.getStartHour(),
-                    schedule.getEndHour(),
-                    Boolean.TRUE.equals(schedule.getReleased()),
-                    visibleSlots.size(),
-                    bookedSlots,
-                    availableSlots
-                );
-            })
-            .toList();
+                .map(schedule -> {
+                    List<AvailableTimeSlot> visibleSlots = getVisibleSlots(schedule);
+                    long bookedSlots = visibleSlots.stream()
+                            .filter(slot -> appointmentBySlotId.containsKey(slot.getId())).count();
+                    long availableSlots = visibleSlots.stream()
+                            .filter(slot -> Boolean.TRUE.equals(slot.getAvailable()))
+                            .filter(slot -> !isPastSlot(slot.getSlotDate(), slot.getStartTime()))
+                            .count();
+                    return new AdminScheduleDayResponse(
+                            schedule.getDayOfWeek().name(),
+                            resolveDayDate(schedule),
+                            schedule.getStartHour(),
+                            schedule.getEndHour(),
+                            Boolean.TRUE.equals(schedule.getReleased()),
+                            Boolean.TRUE.equals(schedule.getDayOff()),
+                            visibleSlots.size(),
+                            bookedSlots,
+                            availableSlots);
+                })
+                .toList();
 
         return new AdminWeekScheduleResponse(weekStart, weekEnd, isWeekReleased(schedules), days);
     }
@@ -327,63 +341,64 @@ public class WeeklyScheduleService {
         }
 
         desiredTimes.stream()
-            .filter(time -> !preservedTimes.contains(time))
-            .forEach(time -> schedule.getSlots().add(
-                AvailableTimeSlot.builder()
-                    .weeklySchedule(schedule)
-                    .slotDate(slotDate)
-                    .startTime(time)
-                    .endTime(time.plusHours(1))
-                    .available(true)
-                    .build()
-            ));
+                .filter(time -> !preservedTimes.contains(time))
+                .forEach(time -> schedule.getSlots().add(
+                        AvailableTimeSlot.builder()
+                                .weeklySchedule(schedule)
+                                .slotDate(slotDate)
+                                .startTime(time)
+                                .endTime(time.plusHours(1))
+                                .available(true)
+                                .build()));
 
         schedule.getSlots().sort(Comparator.comparing(AvailableTimeSlot::getStartTime));
     }
 
     private List<WeeklySchedule> loadPreviousWeekTemplates(LocalDate weekStart) {
-        Optional<WeeklySchedule> previousWeekReference = weeklyScheduleRepository.findTopByWeekStartBeforeOrderByWeekStartDesc(weekStart);
+        Optional<WeeklySchedule> previousWeekReference = weeklyScheduleRepository
+                .findTopByWeekStartBeforeOrderByWeekStartDesc(weekStart);
         return previousWeekReference
-            .map(reference -> weeklyScheduleRepository.findByWeekStart(reference.getWeekStart()))
-            .map(this::sortSchedules)
-            .orElseGet(List::of);
+                .map(reference -> weeklyScheduleRepository.findByWeekStart(reference.getWeekStart()))
+                .map(this::sortSchedules)
+                .orElseGet(List::of);
     }
 
     private List<WeeklySchedule> buildDefaultSchedules(LocalDate weekStart) {
         Map<DayOfWeek, LocalTime[]> defaults = new EnumMap<>(DayOfWeek.class);
-        defaults.put(DayOfWeek.MONDAY, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(18, 0)});
-        defaults.put(DayOfWeek.TUESDAY, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(18, 0)});
-        defaults.put(DayOfWeek.WEDNESDAY, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(18, 0)});
-        defaults.put(DayOfWeek.THURSDAY, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(18, 0)});
-        defaults.put(DayOfWeek.FRIDAY, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(18, 0)});
-        defaults.put(DayOfWeek.SATURDAY, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(14, 0)});
-        defaults.put(DayOfWeek.SUNDAY, new LocalTime[]{LocalTime.of(10, 0), LocalTime.of(13, 0)});
+        defaults.put(DayOfWeek.MONDAY, new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+        defaults.put(DayOfWeek.TUESDAY, new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+        defaults.put(DayOfWeek.WEDNESDAY, new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+        defaults.put(DayOfWeek.THURSDAY, new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+        defaults.put(DayOfWeek.FRIDAY, new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+        defaults.put(DayOfWeek.SATURDAY, new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(14, 0) });
+        defaults.put(DayOfWeek.SUNDAY, new LocalTime[] { LocalTime.of(10, 0), LocalTime.of(13, 0) });
 
         return defaults.entrySet().stream()
-            .map(entry -> WeeklySchedule.builder()
-                .weekStart(weekStart)
-                .dayOfWeek(entry.getKey())
-                .startHour(entry.getValue()[0])
-                .endHour(entry.getValue()[1])
-                .released(false)
-                .slots(new ArrayList<>())
-                .build())
-            .sorted(WEEKDAY_COMPARATOR)
-            .toList();
+                .map(entry -> WeeklySchedule.builder()
+                        .weekStart(weekStart)
+                        .dayOfWeek(entry.getKey())
+                        .startHour(entry.getValue()[0])
+                        .endHour(entry.getValue()[1])
+                        .released(false)
+                        .slots(new ArrayList<>())
+                        .build())
+                .sorted(WEEKDAY_COMPARATOR)
+                .toList();
     }
 
     private List<WeeklySchedule> cloneSchedules(List<WeeklySchedule> templates, LocalDate weekStart) {
         return templates.stream()
-            .map(template -> WeeklySchedule.builder()
-                .weekStart(weekStart)
-                .dayOfWeek(template.getDayOfWeek())
-                .startHour(template.getStartHour())
-                .endHour(template.getEndHour())
-                .released(false)
-                .slots(new ArrayList<>())
-                .build())
-            .sorted(WEEKDAY_COMPARATOR)
-            .toList();
+                .map(template -> WeeklySchedule.builder()
+                        .weekStart(weekStart)
+                        .dayOfWeek(template.getDayOfWeek())
+                        .startHour(template.getStartHour())
+                        .endHour(template.getEndHour())
+                        .released(false)
+                        .dayOff(template.getDayOff())
+                        .slots(new ArrayList<>())
+                        .build())
+                .sorted(WEEKDAY_COMPARATOR)
+                .toList();
     }
 
     private List<WeeklySchedule> sortSchedules(List<WeeklySchedule> schedules) {
@@ -391,11 +406,16 @@ public class WeeklyScheduleService {
     }
 
     private List<AvailableTimeSlot> getVisibleSlots(WeeklySchedule schedule) {
+
+        if (Boolean.TRUE.equals(schedule.getDayOff())) {
+            return List.of();
+        }
+
         return schedule.getSlots().stream()
-            .filter(slot -> !slot.getStartTime().isBefore(schedule.getStartHour()))
-            .filter(slot -> slot.getStartTime().isBefore(schedule.getEndHour()))
-            .sorted(Comparator.comparing(AvailableTimeSlot::getStartTime))
-            .toList();
+                .filter(slot -> !slot.getStartTime().isBefore(schedule.getStartHour()))
+                .filter(slot -> slot.getStartTime().isBefore(schedule.getEndHour()))
+                .sorted(Comparator.comparing(AvailableTimeSlot::getStartTime))
+                .toList();
     }
 
     private LocalDate resolveDayDate(WeeklySchedule schedule) {

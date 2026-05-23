@@ -10,6 +10,7 @@ public record ClientAgendaDayResponse(
     LocalDate date,
     LocalTime startHour,
     LocalTime endHour,
+    boolean dayOff,
     List<TimeSlotResponse> availableSlots,
     List<TimeSlotResponse> occupiedSlots
 ) {

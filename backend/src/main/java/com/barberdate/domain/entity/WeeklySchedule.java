@@ -30,10 +30,8 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(
-    name = "weekly_schedules",
-    uniqueConstraints = @UniqueConstraint(name = "uk_week_day", columnNames = {"week_start", "day_of_week"})
-)
+@Table(name = "weekly_schedules", uniqueConstraints = @UniqueConstraint(name = "uk_week_day", columnNames = {
+        "week_start", "day_of_week" }))
 public class WeeklySchedule {
 
     @Id
@@ -52,6 +50,10 @@ public class WeeklySchedule {
 
     @Column(name = "end_hour", nullable = false)
     private LocalTime endHour;
+
+    @Builder.Default
+    @Column(name = "day_off", nullable = false)
+    private Boolean dayOff = false;
 
     @Builder.Default
     @Column(nullable = false)

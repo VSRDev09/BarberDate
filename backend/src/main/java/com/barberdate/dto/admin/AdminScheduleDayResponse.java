@@ -9,6 +9,7 @@ public record AdminScheduleDayResponse(
     LocalTime startHour,
     LocalTime endHour,
     boolean released,
+    boolean dayOff,
     long totalSlots,
     long bookedSlots,
     long availableSlots

@@ -11,6 +11,7 @@ public record AdminScheduleUpdateRequest(
     String startHour,
     @NotBlank(message = "Hora final é obrigatória")
     @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$", message = "Hora final inválida")
-    String endHour
+    String endHour,
+    boolean dayOff
 ) {
 }

@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS weekly_schedules (
     day_of_week VARCHAR(20) NOT NULL,
     start_hour TIME NOT NULL,
     end_hour TIME NOT NULL,
+    day_off BOOLEAN NOT NULL DEFAULT FALSE,
     released BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_week_day UNIQUE (week_start, day_of_week)
