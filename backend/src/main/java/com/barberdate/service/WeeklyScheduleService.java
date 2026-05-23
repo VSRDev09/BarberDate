@@ -104,40 +104,71 @@ public class WeeklyScheduleService {
 
     @Transactional
     public AdminWeekScheduleResponse updateDaySchedule(AdminScheduleUpdateRequest request) {
+
         List<WeeklySchedule> currentSchedules = ensureCurrentWeekSchedules();
+
         LocalDate weekStart = getCurrentWeekStart();
+
         DayOfWeek dayOfWeek = parseDayOfWeek(request.dayOfWeek());
-        LocalTime startHour = LocalTime.parse(request.startHour());
-        LocalTime endHour = LocalTime.parse(request.endHour());
-        boolean isDayOff = Boolean.TRUE.equals(request.dayOff());
+
+        boolean isDayOff = request.dayOff();
+
+        LocalTime startHour = null;
+        LocalTime endHour = null;
 
         if (!isDayOff) {
+
+            if (request.startHour() == null || request.startHour().isBlank()) {
+                throw new BusinessException("Hora inicial é obrigatória");
+            }
+
+            if (request.endHour() == null || request.endHour().isBlank()) {
+                throw new BusinessException("Hora final é obrigatória");
+            }
+
+            startHour = LocalTime.parse(request.startHour());
+            endHour = LocalTime.parse(request.endHour());
+
             validateHourlyRange(startHour, endHour);
+
+        } else {
+
+            if (request.startHour() != null || request.endHour() != null) {
+                throw new BusinessException(
+                        "Dias de folga não devem possuir horários");
+            }
         }
 
-        WeeklySchedule schedule = weeklyScheduleRepository.findByWeekStartAndDayOfWeek(weekStart, dayOfWeek)
+        final LocalTime finalStartHour = startHour;
+        final LocalTime finalEndHour = endHour;
+
+        WeeklySchedule schedule = weeklyScheduleRepository
+                .findByWeekStartAndDayOfWeek(weekStart, dayOfWeek)
                 .orElseGet(() -> weeklyScheduleRepository.save(
                         WeeklySchedule.builder()
                                 .weekStart(weekStart)
                                 .dayOfWeek(dayOfWeek)
-                                .startHour(startHour)
-                                .endHour(endHour)
+                                .startHour(finalStartHour)
+                                .endHour(finalEndHour)
                                 .released(isWeekReleased(currentSchedules))
-                                .dayOff(false)
+                                .dayOff(isDayOff)
                                 .slots(new ArrayList<>())
                                 .build()));
 
         LocalDate dayDate = weekStart.plusDays(dayOfWeek.getValue() - 1L);
+
         List<Appointment> activeAppointments = appointmentRepository
                 .findByAppointmentDateAndStatusOrderByAppointmentTimeAsc(
                         dayDate,
                         AppointmentStatus.SCHEDULED);
+
         Map<LocalTime, Appointment> appointmentsByTime = activeAppointments.stream()
                 .collect(
                         java.util.stream.Collectors.toMap(
                                 Appointment::getAppointmentTime,
                                 appointment -> appointment,
                                 (left, right) -> left));
+
         if (isDayOff) {
 
             if (!activeAppointments.isEmpty()) {
@@ -158,19 +189,24 @@ public class WeeklyScheduleService {
                     ensureCurrentWeekSchedules());
         }
 
-        appointmentsByTime.keySet().forEach(time -> {
-            if (time.isBefore(startHour) || !time.isBefore(endHour)) {
-                throw new BusinessException("Existem agendamentos ativos fora do novo intervalo informado");
+        for (LocalTime time : appointmentsByTime.keySet()) {
+
+            if (time.isBefore(finalStartHour) || !time.isBefore(finalEndHour)) {
+                throw new BusinessException(
+                        "Existem agendamentos ativos fora do novo intervalo informado");
             }
-        });
+        }
 
         schedule.setDayOff(false);
-        schedule.setStartHour(startHour);
-        schedule.setEndHour(endHour);
+        schedule.setStartHour(finalStartHour);
+        schedule.setEndHour(finalEndHour);
+
         regenerateSlots(schedule, appointmentsByTime);
+
         weeklyScheduleRepository.save(schedule);
 
-        return buildAdminWeekScheduleResponse(ensureCurrentWeekSchedules());
+        return buildAdminWeekScheduleResponse(
+                ensureCurrentWeekSchedules());
     }
 
     @Transactional

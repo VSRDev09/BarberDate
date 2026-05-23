@@ -10,19 +10,14 @@ import { extractApiErrorMessage } from '../../utils/http.js'
 
 function buildDrafts(days) {
   return Object.fromEntries(
-    days.map((day) => {
-      const hasHours = day.startHour && day.endHour;
-      const isMidnightShift = formatTime(day.startHour) === '00:00' && formatTime(day.endHour) === '01:00';
-      
-      return [
-        day.dayOfWeek,
-        {
-          startHour: formatTime(day.startHour),
-          endHour: formatTime(day.endHour),
-          isOpen: !!(hasHours && !isMidnightShift && day.totalSlots > 0)
-        },
-      ];
-    }),
+    days.map((day) => [
+      day.dayOfWeek,
+      {
+        startHour: formatTime(day.startHour),
+        endHour: formatTime(day.endHour),
+        isOpen: !day.dayOff,
+      },
+    ]),
   )
 }
 
@@ -35,15 +30,20 @@ export function AdminSchedulePage() {
 
   const loadSchedule = async () => {
     setLoading(true)
+
     try {
       const { data } = await api.get('/admin/schedules/week')
+
       setSchedule(data)
       setDrafts(buildDrafts(data.days))
     } catch (error) {
       showToast({
         type: 'error',
         title: 'Falha ao carregar agenda',
-        description: extractApiErrorMessage(error, 'Não foi possível buscar a agenda semanal.'),
+        description: extractApiErrorMessage(
+          error,
+          'Não foi possível buscar a agenda semanal.',
+        ),
       })
     } finally {
       setLoading(false)
@@ -56,49 +56,58 @@ export function AdminSchedulePage() {
 
   const visibleDays = useMemo(() => schedule?.days ?? [], [schedule])
 
-  // CÁLCULO EXCLUSIVO PARA IGNORAR SLOTS FANTASMAS DA SEMANA
   const totalSlotsReais = useMemo(() => {
     return visibleDays.reduce((acc, day) => {
-      const isFolga = formatTime(day.startHour) === '00:00' && formatTime(day.endHour) === '01:00';
-      return acc + (isFolga ? 0 : (day.totalSlots || 0));
-    }, 0);
-  }, [visibleDays]);
+      return acc + (day.dayOff ? 0 : (day.totalSlots || 0))
+    }, 0)
+  }, [visibleDays])
 
   const livresReais = useMemo(() => {
     return visibleDays.reduce((acc, day) => {
-      const isFolga = formatTime(day.startHour) === '00:00' && formatTime(day.endHour) === '01:00';
-      return acc + (isFolga ? 0 : (day.availableSlots || 0));
-    }, 0);
-  }, [visibleDays]);
+      return acc + (day.dayOff ? 0 : (day.availableSlots || 0))
+    }, 0)
+  }, [visibleDays])
 
   const handleSaveDay = async (dayOfWeek) => {
     const draft = drafts[dayOfWeek]
+
     setSavingKey(dayOfWeek)
 
-    const startHour = draft.isOpen ? draft.startHour : '00:00'
-    const endHour = draft.isOpen ? draft.endHour : '01:00'
+    const payload = draft.isOpen
+      ? {
+          dayOfWeek,
+          dayOff: false,
+          startHour: draft.startHour,
+          endHour: draft.endHour,
+        }
+      : {
+          dayOfWeek,
+          dayOff: true,
+        }
 
     try {
-      const { data } = await api.put('/admin/schedules/day', {
-        dayOfWeek,
-        startHour,
-        endHour,
-      })
+      const { data } = await api.put('/admin/schedules/day', payload)
 
       setSchedule(data)
       setDrafts(buildDrafts(data.days))
+
       showToast({
         type: 'success',
-        title: draft.isOpen ? 'Horários atualizados' : 'Dia de folga configurado',
-        description: draft.isOpen 
-          ? 'Os slots deste dia foram recalculados.' 
+        title: draft.isOpen
+          ? 'Horários atualizados'
+          : 'Dia de folga configurado',
+        description: draft.isOpen
+          ? 'Os slots deste dia foram recalculados.'
           : 'Este dia foi marcado como fechado com sucesso.',
       })
     } catch (error) {
       showToast({
         type: 'error',
         title: 'Falha ao salvar dia',
-        description: extractApiErrorMessage(error, 'Não foi possível atualizar este dia.'),
+        description: extractApiErrorMessage(
+          error,
+          'Não foi possível atualizar este dia.',
+        ),
       })
     } finally {
       setSavingKey(null)
@@ -107,15 +116,26 @@ export function AdminSchedulePage() {
 
   const handleToggleRelease = async () => {
     setSavingKey('release')
+
     try {
-      const { data } = await api.post('/admin/schedules/release', null, {
-        params: { released: !schedule.released },
-      })
+      const { data } = await api.post(
+        '/admin/schedules/release',
+        null,
+        {
+          params: {
+            released: !schedule.released,
+          },
+        },
+      )
+
       setSchedule(data)
       setDrafts(buildDrafts(data.days))
+
       showToast({
         type: 'success',
-        title: data.released ? 'Agenda liberada' : 'Agenda recolhida',
+        title: data.released
+          ? 'Agenda liberada'
+          : 'Agenda recolhida',
         description: data.released
           ? 'Os clientes já podem reservar os horários da semana.'
           : 'Os clientes não conseguem mais visualizar horários reserváveis.',
@@ -124,7 +144,10 @@ export function AdminSchedulePage() {
       showToast({
         type: 'error',
         title: 'Falha na liberação',
-        description: extractApiErrorMessage(error, 'Não foi possível alterar o estado da agenda.'),
+        description: extractApiErrorMessage(
+          error,
+          'Não foi possível alterar o estado da agenda.',
+        ),
       })
     } finally {
       setSavingKey(null)
@@ -132,7 +155,9 @@ export function AdminSchedulePage() {
   }
 
   if (loading) {
-    return <LoadingSpinner label="Carregando agenda semanal..." />
+    return (
+      <LoadingSpinner label="Carregando agenda semanal..." />
+    )
   }
 
   return (
@@ -146,10 +171,26 @@ export function AdminSchedulePage() {
           />
 
           <div className="rounded-[26px] border border-amber-300/14 bg-amber-300/8 p-5">
-            <p className="section-kicker">Disponibilidade</p>
-            <p className="mt-2 font-display text-4xl text-[#f8efcf]">
-              {schedule.released ? 'Liberada' : 'Bloqueada'}
+            <p className="section-kicker">
+              Disponibilidade
             </p>
+
+            <p className="mt-2 font-display text-4xl text-[#f8efcf]">
+              {schedule.released
+                ? 'Liberada'
+                : 'Bloqueada'}
+            </p>
+
+            <div className="mt-4 space-y-2 text-sm text-white/60">
+              <p>
+                Slots totais: {totalSlotsReais}
+              </p>
+
+              <p>
+                Slots livres: {livresReais}
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={handleToggleRelease}
@@ -157,6 +198,7 @@ export function AdminSchedulePage() {
               disabled={savingKey === 'release'}
             >
               <LockOpen className="h-4 w-4" />
+
               {savingKey === 'release'
                 ? 'Atualizando...'
                 : schedule.released
@@ -169,22 +211,44 @@ export function AdminSchedulePage() {
 
       <div className="grid gap-5 xl:grid-cols-2">
         {visibleDays.map((day) => {
-          const isDayOpen = drafts[day.dayOfWeek]?.isOpen ?? true;
+          const isDayOpen =
+            drafts[day.dayOfWeek]?.isOpen ?? !day.dayOff
 
           return (
-            <CardShell key={`${day.dayOfWeek}-${day.date}`} className="relative overflow-hidden">
+            <CardShell
+              key={`${day.dayOfWeek}-${day.date}`}
+              className="relative overflow-hidden"
+            >
               <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-amber-300/7 blur-3xl" />
+
               <div className="relative">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className={`rounded-2xl border p-3 ${isDayOpen ? 'border-amber-300/20 bg-amber-300/8 text-amber-300' : 'border-white/10 bg-white/5 text-white/40'}`}>
-                      {isDayOpen ? <CalendarRange className="h-5 w-5" /> : <CalendarOff className="h-5 w-5" />}
+                    <div
+                      className={`rounded-2xl border p-3 ${
+                        isDayOpen
+                          ? 'border-amber-300/20 bg-amber-300/8 text-amber-300'
+                          : 'border-white/10 bg-white/5 text-white/40'
+                      }`}
+                    >
+                      {isDayOpen ? (
+                        <CalendarRange className="h-5 w-5" />
+                      ) : (
+                        <CalendarOff className="h-5 w-5" />
+                      )}
                     </div>
+
                     <div>
                       <p className="text-sm font-semibold text-[#f6e8c3]">
-                        {formatDayLabel(day.dayOfWeek, day.date)}
+                        {formatDayLabel(
+                          day.dayOfWeek,
+                          day.date,
+                        )}
                       </p>
-                      <p className="text-sm text-white/45">{formatLongDate(day.date)}</p>
+
+                      <p className="text-sm text-white/45">
+                        {formatLongDate(day.date)}
+                      </p>
                     </div>
                   </div>
 
@@ -193,18 +257,32 @@ export function AdminSchedulePage() {
                       type="checkbox"
                       className="peer sr-only"
                       checked={isDayOpen}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const checked =
+                          event.target.checked
+
                         setDrafts((current) => ({
                           ...current,
+
                           [day.dayOfWeek]: {
                             ...current[day.dayOfWeek],
-                            isOpen: event.target.checked,
+
+                            isOpen: checked,
+
+                            ...(checked
+                              ? {}
+                              : {
+                                  startHour: '',
+                                  endHour: '',
+                                }),
                           },
                         }))
-                      }
+                      }}
                     />
-                    <div className="peer h-6 w-11 rounded-full bg-white/10 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white/40 after:transition-all peer-checked:bg-amber-400 peer-checked:after:translate-x-full peer-checked:after:bg-black" />
-                    <span className="ml-2 text-xs font-semibold text-white/60 uppercase tracking-wider">
+
+                    <div className="peer h-6 w-11 rounded-full bg-white/10 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white/40 after:transition-all peer-checked:bg-amber-400 peer-checked:after:translate-x-full peer-checked:after:bg-black" />
+
+                    <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-white/60">
                       {isDayOpen ? 'Aberto' : 'Folga'}
                     </span>
                   </label>
@@ -217,37 +295,56 @@ export function AdminSchedulePage() {
                         <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
                           Início
                         </label>
+
                         <input
                           type="time"
                           step="3600"
                           className="input-shell"
-                          value={drafts[day.dayOfWeek]?.startHour ?? formatTime(day.startHour)}
+                          value={
+                            drafts[day.dayOfWeek]
+                              ?.startHour || ''
+                          }
                           onChange={(event) =>
                             setDrafts((current) => ({
                               ...current,
+
                               [day.dayOfWeek]: {
-                                ...current[day.dayOfWeek],
-                                startHour: event.target.value,
+                                ...current[
+                                  day.dayOfWeek
+                                ],
+
+                                startHour:
+                                  event.target.value,
                               },
                             }))
                           }
                         />
                       </div>
+
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
                           Fim
                         </label>
+
                         <input
                           type="time"
                           step="3600"
                           className="input-shell"
-                          value={drafts[day.dayOfWeek]?.endHour ?? formatTime(day.endHour)}
+                          value={
+                            drafts[day.dayOfWeek]
+                              ?.endHour || ''
+                          }
                           onChange={(event) =>
                             setDrafts((current) => ({
                               ...current,
+
                               [day.dayOfWeek]: {
-                                ...current[day.dayOfWeek],
-                                endHour: event.target.value,
+                                ...current[
+                                  day.dayOfWeek
+                                ],
+
+                                endHour:
+                                  event.target.value,
                               },
                             }))
                           }
@@ -257,40 +354,61 @@ export function AdminSchedulePage() {
 
                     <div className="mt-5 grid grid-cols-3 gap-3">
                       <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-white/35">Slots</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+                          Slots
+                        </p>
+
                         <p className="mt-2 text-2xl font-semibold text-[#f6e8c3]">
-                          {isDayOpen ? day.totalSlots : 0}
+                          {day.totalSlots}
                         </p>
                       </div>
+
                       <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-white/35">Reservados</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+                          Reservados
+                        </p>
+
                         <p className="mt-2 text-2xl font-semibold text-[#f6e8c3]">
-                          {isDayOpen ? day.bookedSlots : 0}
+                          {day.bookedSlots}
                         </p>
                       </div>
+
                       <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-white/35">Livres</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-white/35">
+                          Livres
+                        </p>
+
                         <p className="mt-2 text-2xl font-semibold text-[#f6e8c3]">
-                          {isDayOpen ? day.availableSlots : 0}
+                          {day.availableSlots}
                         </p>
                       </div>
                     </div>
                   </>
                 ) : (
                   <div className="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.01] p-6 text-center">
-                    <p className="text-sm font-medium text-white/40">Nenhum horário comercial definido para este dia.</p>
+                    <p className="text-sm font-medium text-white/40">
+                      Nenhum horário comercial definido
+                      para este dia.
+                    </p>
                   </div>
                 )}
 
                 <div className="mt-5 flex justify-end border-t border-white/5 pt-4">
                   <button
                     type="button"
-                    onClick={() => handleSaveDay(day.dayOfWeek)}
-                    disabled={savingKey === day.dayOfWeek}
+                    onClick={() =>
+                      handleSaveDay(day.dayOfWeek)
+                    }
+                    disabled={
+                      savingKey === day.dayOfWeek
+                    }
                     className="premium-button premium-button-primary px-4 py-2 text-xs"
                   >
                     <Save className="h-3.5 w-3.5" />
-                    {savingKey === day.dayOfWeek ? 'Salvando...' : 'Salvar Alterações'}
+
+                    {savingKey === day.dayOfWeek
+                      ? 'Salvando...'
+                      : 'Salvar Alterações'}
                   </button>
                 </div>
               </div>

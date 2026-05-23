@@ -11,10 +11,8 @@ export function WeeklyCalendar({
   return (
     <div className="grid gap-5 xl:grid-cols-2">
       {days.map((day) => {
-        // Trava os slots gerados na madrugada e considera o dia Fechado
-        const isClosed = 
-          (formatTime(day.startHour) === "00:00" && formatTime(day.endHour) === "01:00") ||
-          (formatTime(day.startHour) === "00:00" && formatTime(day.endHour) === "00:00");
+       
+       const isClosed = day.dayOff;
 
         return (
           <CardShell key={`${day.dayOfWeek}-${day.date}`} className="relative overflow-hidden">
