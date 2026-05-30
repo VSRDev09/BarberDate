@@ -105,7 +105,7 @@ export function AdminLoginPage() {
                   type="text"
                   value={form.username}
                   onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
-                  placeholder="admin"
+                  
                 />
               </div>
 
@@ -118,7 +118,7 @@ export function AdminLoginPage() {
                   type="password"
                   value={form.password}
                   onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                  placeholder="admin123"
+                  
                 />
               </div>
 
