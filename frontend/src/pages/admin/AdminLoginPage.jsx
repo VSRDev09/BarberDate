@@ -9,7 +9,7 @@ import { api } from '../../lib/api.js'
 import { extractApiErrorMessage } from '../../utils/http.js'
 
 export function AdminLoginPage() {
-  const [form, setForm] = useState({ username: 'admin', password: 'admin123' })
+  const [form, setForm] = useState({ username: '', password: '' })
   const [loading, setLoading] = useState(false)
   const { isAuthenticated, login } = useAuth()
   const { showToast } = useToast()
