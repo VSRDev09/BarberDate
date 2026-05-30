@@ -43,6 +43,8 @@ export function AdminDashboardPage() {
             "Não foi possível carregar os dados do painel.",
           ),
         });
+
+        console.error("Erro ao carregar dashboard:", error);
       } finally {
         setLoading(false);
       }
@@ -54,6 +56,16 @@ export function AdminDashboardPage() {
   if (loading) {
     return <LoadingSpinner label="Carregando painel administrativo..." />;
   }
+
+  if (!dashboard) {
+  return (
+    <CardShell>
+      <p className="text-red-400">
+        Dashboard indisponível
+      </p>
+    </CardShell>
+  );
+}
 
   const metrics = [
     {
@@ -84,7 +96,7 @@ export function AdminDashboardPage() {
         <SectionTitle
           eyebrow="Painel Admin"
           title="Visão geral da semana Barber Date"
-          description={`Semana de ${formatLongDate(dashboard.weekStart)} até ${formatLongDate(dashboard.weekEnd)}.`}
+          description={`Semana de ${formatLongDate(dashboard?.weekStart)} até ${formatLongDate(dashboard?.weekEnd)}.`}
         />
       </CardShell>
 
