@@ -27,10 +27,8 @@ export function AdminDashboardPage() {
       setLoading(true);
 
       try {
-        const [dashboardResponse, appointmentsResponse] = await Promise.all([
-          api.get("/admin/dashboard"),
-          api.get("/admin/appointments/week"),
-        ]);
+        const dashboardResponse = await api.get("/admin/dashboard");
+        const appointmentsResponse = await api.get("/admin/appointments/week");
 
         setDashboard(dashboardResponse.data);
         setAppointmentsByDay(appointmentsResponse.data);
@@ -58,14 +56,12 @@ export function AdminDashboardPage() {
   }
 
   if (!dashboard) {
-  return (
-    <CardShell>
-      <p className="text-red-400">
-        Dashboard indisponível
-      </p>
-    </CardShell>
-  );
-}
+    return (
+      <CardShell>
+        <p className="text-red-400">Dashboard indisponível</p>
+      </CardShell>
+    );
+  }
 
   const metrics = [
     {
@@ -111,7 +107,7 @@ export function AdminDashboardPage() {
                   <Icon className="h-5 w-5" />
                 </div>
 
-               <p className="flex-1 min-w-0 break-words text-xs uppercase tracking-[0.18em] text-white/35">
+                <p className="flex-1 min-w-0 break-words text-xs uppercase tracking-[0.18em] text-white/35">
                   {metric.label}
                 </p>
               </div>
