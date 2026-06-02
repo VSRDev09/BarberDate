@@ -7,13 +7,23 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  const rawAuth = window.localStorage.getItem(ADMIN_AUTH_STORAGE_KEY)
+  const isAdminRequest =
+    config.url?.startsWith('/admin')
+
+  if (!isAdminRequest) {
+    return config
+  }
+
+  const rawAuth = window.localStorage.getItem(
+    ADMIN_AUTH_STORAGE_KEY
+  )
 
   if (rawAuth) {
     const parsedAuth = JSON.parse(rawAuth)
 
     if (parsedAuth?.token) {
-      config.headers.Authorization = `Bearer ${parsedAuth.token}`
+      config.headers.Authorization =
+        `Bearer ${parsedAuth.token}`
     }
   }
 
