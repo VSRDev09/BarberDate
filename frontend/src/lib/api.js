@@ -6,6 +6,10 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
 })
 
+export function clearAdminSession() {
+  window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY)
+}
+
 api.interceptors.request.use((config) => {
   const isAdminRequest =
     config.url?.startsWith('/admin')
@@ -29,5 +33,29 @@ api.interceptors.request.use((config) => {
 
   return config
 })
+
+api.interceptors.response.use(
+  (response) => response,
+
+  (error) => {
+    const status = error.response?.status
+
+    const isAdminRequest =
+      error.config?.url?.startsWith('/admin')
+
+    if (
+      isAdminRequest &&
+      (status === 401 || status === 403)
+    ) {
+
+      clearAdminSession()
+
+      window.location.href =
+        '/admin/login?expired=true'
+    }
+
+    return Promise.reject(error)
+  }
+)
 
 export { ADMIN_AUTH_STORAGE_KEY }
