@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,6 +39,20 @@ public class WeeklyScheduleService {
 
     private static final Comparator<WeeklySchedule> WEEKDAY_COMPARATOR = Comparator
             .comparingInt(schedule -> schedule.getDayOfWeek().getValue());
+
+    /**
+     * Duração padrão dos atendimentos.
+     *
+     * Antes:
+     * 60 minutos (1 hora)
+     *
+     * Agora:
+     * 45 minutos
+     *
+     * Centralizar esse valor em uma constante evita números mágicos
+     * espalhados pelo código e facilita futuras alterações.
+     */
+    private static final int SLOT_DURATION_MINUTES = 45;
 
     private final WeeklyScheduleRepository weeklyScheduleRepository;
     private final AppointmentRepository appointmentRepository;
@@ -338,9 +351,15 @@ public class WeeklyScheduleService {
     private void regenerateSlots(WeeklySchedule schedule, Map<LocalTime, Appointment> bookedAppointmentsByTime) {
         LocalDate slotDate = resolveDayDate(schedule);
         Set<LocalTime> desiredTimes = new LinkedHashSet<>();
-        for (LocalTime time = schedule.getStartHour(); time.isBefore(schedule.getEndHour()); time = time.plusHours(1)) {
-            desiredTimes.add(time);
-        }
+        for (
+        LocalTime time = schedule.getStartHour();
+        !time.plusMinutes(SLOT_DURATION_MINUTES)
+                .isAfter(schedule.getEndHour());
+        time = time.plusMinutes(SLOT_DURATION_MINUTES)
+) {
+
+    desiredTimes.add(time);
+}
 
         if (schedule.getSlots() == null) {
             schedule.setSlots(new ArrayList<>());
@@ -351,7 +370,7 @@ public class WeeklyScheduleService {
         while (iterator.hasNext()) {
             AvailableTimeSlot slot = iterator.next();
             slot.setSlotDate(slotDate);
-            slot.setEndTime(slot.getStartTime().plusHours(1));
+            slot.setEndTime(slot.getStartTime().plusHours(SLOT_DURATION_MINUTES));
 
             if (bookedAppointmentsByTime.containsKey(slot.getStartTime())) {
                 if (!desiredTimes.contains(slot.getStartTime())) {
@@ -383,7 +402,7 @@ public class WeeklyScheduleService {
                                 .weeklySchedule(schedule)
                                 .slotDate(slotDate)
                                 .startTime(time)
-                                .endTime(time.plusHours(1))
+                                .endTime(time.plusHours(SLOT_DURATION_MINUTES))
                                 .available(true)
                                 .build()));
 
