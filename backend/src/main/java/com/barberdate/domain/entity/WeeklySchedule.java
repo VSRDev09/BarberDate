@@ -55,6 +55,12 @@ public class WeeklySchedule {
     @Column(name = "day_off", nullable = false)
     private Boolean dayOff = false;
 
+    @Column(name = "lunch_start")
+    private LocalTime lunchStart;
+
+    @Column(name = "lunch_end")
+    private LocalTime lunchEnd;
+
     @Builder.Default
     @Column(nullable = false)
     private Boolean released = false;

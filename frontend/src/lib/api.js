@@ -23,11 +23,15 @@ api.interceptors.request.use((config) => {
   )
 
   if (rawAuth) {
-    const parsedAuth = JSON.parse(rawAuth)
+    try {
+      const parsedAuth = JSON.parse(rawAuth)
 
-    if (parsedAuth?.token) {
-      config.headers.Authorization =
-        `Bearer ${parsedAuth.token}`
+      if (parsedAuth?.token) {
+        config.headers.Authorization =
+          `Bearer ${parsedAuth.token}`
+      }
+    } catch {
+      clearAdminSession()
     }
   }
 
@@ -51,7 +55,7 @@ api.interceptors.response.use(
       clearAdminSession()
 
       window.location.href =
-        '/admin/login?expired=true'
+        '/barbeiro/login?expired=true'
     }
 
     return Promise.reject(error)

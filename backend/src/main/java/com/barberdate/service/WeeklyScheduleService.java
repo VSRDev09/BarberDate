@@ -37,22 +37,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WeeklyScheduleService {
 
+    private static final int SLOT_DURATION_MINUTES = 45;
+    private static final int SLOT_STEP_MINUTES = 45;
+
     private static final Comparator<WeeklySchedule> WEEKDAY_COMPARATOR = Comparator
             .comparingInt(schedule -> schedule.getDayOfWeek().getValue());
-
-    /**
-     * Duração padrão dos atendimentos.
-     *
-     * Antes:
-     * 60 minutos (1 hora)
-     *
-     * Agora:
-     * 45 minutos
-     *
-     * Centralizar esse valor em uma constante evita números mágicos
-     * espalhados pelo código e facilita futuras alterações.
-     */
-    private static final int SLOT_DURATION_MINUTES = 45;
 
     private final WeeklyScheduleRepository weeklyScheduleRepository;
     private final AppointmentRepository appointmentRepository;
@@ -117,20 +106,17 @@ public class WeeklyScheduleService {
 
     @Transactional
     public AdminWeekScheduleResponse updateDaySchedule(AdminScheduleUpdateRequest request) {
-
         List<WeeklySchedule> currentSchedules = ensureCurrentWeekSchedules();
-
         LocalDate weekStart = getCurrentWeekStart();
-
         DayOfWeek dayOfWeek = parseDayOfWeek(request.dayOfWeek());
-
         boolean isDayOff = request.dayOff();
 
         LocalTime startHour = null;
         LocalTime endHour = null;
+        LocalTime lunchStart = null;
+        LocalTime lunchEnd = null;
 
         if (!isDayOff) {
-
             if (request.startHour() == null || request.startHour().isBlank()) {
                 throw new BusinessException("Hora inicial é obrigatória");
             }
@@ -141,35 +127,36 @@ public class WeeklyScheduleService {
 
             startHour = LocalTime.parse(request.startHour());
             endHour = LocalTime.parse(request.endHour());
+            lunchStart = parseOptionalTime(request.lunchStart());
+            lunchEnd = parseOptionalTime(request.lunchEnd());
 
             validateHourlyRange(startHour, endHour);
-
-        } else {
-
-            if (request.startHour() != null || request.endHour() != null) {
-                throw new BusinessException(
-                        "Dias de folga não devem possuir horários");
-            }
+            validateLunchRange(startHour, endHour, lunchStart, lunchEnd);
+        } else if (request.startHour() != null
+                || request.endHour() != null
+                || request.lunchStart() != null
+                || request.lunchEnd() != null) {
+            throw new BusinessException("Dias de folga não devem possuir horários");
         }
 
         final LocalTime finalStartHour = startHour;
         final LocalTime finalEndHour = endHour;
+        final LocalTime finalLunchStart = lunchStart;
+        final LocalTime finalLunchEnd = lunchEnd;
 
         WeeklySchedule schedule = weeklyScheduleRepository
                 .findByWeekStartAndDayOfWeek(weekStart, dayOfWeek)
-                .orElseGet(() -> weeklyScheduleRepository.save(
-                        WeeklySchedule.builder()
-                                .weekStart(weekStart)
-                                .dayOfWeek(dayOfWeek)
-                                .startHour(finalStartHour)
-                                .endHour(finalEndHour)
-                                .released(isWeekReleased(currentSchedules))
-                                .dayOff(isDayOff)
-                                .slots(new ArrayList<>())
-                                .build()));
+                .orElseGet(() -> WeeklySchedule.builder()
+                        .weekStart(weekStart)
+                        .dayOfWeek(dayOfWeek)
+                        .slots(new ArrayList<>())
+                        .build());
+
+        schedule.setWeekStart(weekStart);
+        schedule.setDayOfWeek(dayOfWeek);
+        schedule.setReleased(isWeekReleased(currentSchedules));
 
         LocalDate dayDate = weekStart.plusDays(dayOfWeek.getValue() - 1L);
-
         List<Appointment> activeAppointments = appointmentRepository
                 .findByAppointmentDateAndStatusOrderByAppointmentTimeAsc(
                         dayDate,
@@ -183,43 +170,42 @@ public class WeeklyScheduleService {
                                 (left, right) -> left));
 
         if (isDayOff) {
-
             if (!activeAppointments.isEmpty()) {
-                throw new BusinessException(
-                        "Existem agendamentos ativos nesse dia");
+                throw new BusinessException("Existem agendamentos ativos nesse dia");
             }
 
             schedule.setDayOff(true);
-
             schedule.setStartHour(LocalTime.MIN);
             schedule.setEndHour(LocalTime.MIN);
-
+            schedule.setLunchStart(null);
+            schedule.setLunchEnd(null);
             schedule.getSlots().clear();
 
             weeklyScheduleRepository.save(schedule);
-
-            return buildAdminWeekScheduleResponse(
-                    ensureCurrentWeekSchedules());
+            return buildAdminWeekScheduleResponse(ensureCurrentWeekSchedules());
         }
 
-        for (LocalTime time : appointmentsByTime.keySet()) {
+        validateLunchDoesNotConflictWithAppointments(
+                finalLunchStart,
+                finalLunchEnd,
+                activeAppointments);
 
+        for (LocalTime time : appointmentsByTime.keySet()) {
             if (time.isBefore(finalStartHour) || !time.isBefore(finalEndHour)) {
-                throw new BusinessException(
-                        "Existem agendamentos ativos fora do novo intervalo informado");
+                throw new BusinessException("Existem agendamentos ativos fora do novo intervalo informado");
             }
         }
 
         schedule.setDayOff(false);
         schedule.setStartHour(finalStartHour);
         schedule.setEndHour(finalEndHour);
+        schedule.setLunchStart(finalLunchStart);
+        schedule.setLunchEnd(finalLunchEnd);
 
         regenerateSlots(schedule, appointmentsByTime);
-
         weeklyScheduleRepository.save(schedule);
 
-        return buildAdminWeekScheduleResponse(
-                ensureCurrentWeekSchedules());
+        return buildAdminWeekScheduleResponse(ensureCurrentWeekSchedules());
     }
 
     @Transactional
@@ -341,7 +327,9 @@ public class WeeklyScheduleService {
                             Boolean.TRUE.equals(schedule.getDayOff()),
                             visibleSlots.size(),
                             bookedSlots,
-                            availableSlots);
+                            availableSlots,
+                            schedule.getLunchStart(),
+                            schedule.getLunchEnd());
                 })
                 .toList();
 
@@ -351,15 +339,26 @@ public class WeeklyScheduleService {
     private void regenerateSlots(WeeklySchedule schedule, Map<LocalTime, Appointment> bookedAppointmentsByTime) {
         LocalDate slotDate = resolveDayDate(schedule);
         Set<LocalTime> desiredTimes = new LinkedHashSet<>();
-        for (
-        LocalTime time = schedule.getStartHour();
-        !time.plusMinutes(SLOT_DURATION_MINUTES)
-                .isAfter(schedule.getEndHour());
-        time = time.plusMinutes(SLOT_DURATION_MINUTES)
-) {
+        for (LocalTime time = schedule.getStartHour(); time.isBefore(schedule.getEndHour()); ) {
+            LocalTime slotEnd = time.plusMinutes(SLOT_DURATION_MINUTES);
 
-    desiredTimes.add(time);
-}
+            if (slotEnd.isAfter(schedule.getEndHour())) {
+                break;
+            }
+
+            if (overlapsLunch(time, slotEnd, schedule)) {
+                if (schedule.getLunchEnd() != null) {
+                    time = schedule.getLunchEnd();
+                    continue;
+                }
+
+                time = time.plusMinutes(SLOT_STEP_MINUTES);
+                continue;
+            }
+
+            desiredTimes.add(time);
+            time = time.plusMinutes(SLOT_STEP_MINUTES);
+        }
 
         if (schedule.getSlots() == null) {
             schedule.setSlots(new ArrayList<>());
@@ -370,7 +369,7 @@ public class WeeklyScheduleService {
         while (iterator.hasNext()) {
             AvailableTimeSlot slot = iterator.next();
             slot.setSlotDate(slotDate);
-            slot.setEndTime(slot.getStartTime().plusHours(SLOT_DURATION_MINUTES));
+            slot.setEndTime(slot.getStartTime().plusMinutes(SLOT_DURATION_MINUTES));
 
             if (bookedAppointmentsByTime.containsKey(slot.getStartTime())) {
                 if (!desiredTimes.contains(slot.getStartTime())) {
@@ -402,7 +401,7 @@ public class WeeklyScheduleService {
                                 .weeklySchedule(schedule)
                                 .slotDate(slotDate)
                                 .startTime(time)
-                                .endTime(time.plusHours(SLOT_DURATION_MINUTES))
+                                .endTime(time.plusMinutes(SLOT_DURATION_MINUTES))
                                 .available(true)
                                 .build()));
 
@@ -434,6 +433,8 @@ public class WeeklyScheduleService {
                         .dayOfWeek(entry.getKey())
                         .startHour(entry.getValue()[0])
                         .endHour(entry.getValue()[1])
+                        .lunchStart(null)
+                        .lunchEnd(null)
                         .released(false)
                         .slots(new ArrayList<>())
                         .build())
@@ -448,6 +449,8 @@ public class WeeklyScheduleService {
                         .dayOfWeek(template.getDayOfWeek())
                         .startHour(template.getStartHour())
                         .endHour(template.getEndHour())
+                        .lunchStart(template.getLunchStart())
+                        .lunchEnd(template.getLunchEnd())
                         .released(false)
                         .dayOff(template.getDayOff())
                         .slots(new ArrayList<>())
@@ -461,7 +464,6 @@ public class WeeklyScheduleService {
     }
 
     private List<AvailableTimeSlot> getVisibleSlots(WeeklySchedule schedule) {
-
         if (Boolean.TRUE.equals(schedule.getDayOff())) {
             return List.of();
         }
@@ -469,6 +471,7 @@ public class WeeklyScheduleService {
         return schedule.getSlots().stream()
                 .filter(slot -> !slot.getStartTime().isBefore(schedule.getStartHour()))
                 .filter(slot -> slot.getStartTime().isBefore(schedule.getEndHour()))
+                .filter(slot -> !overlapsLunch(slot.getStartTime(), slot.getEndTime(), schedule))
                 .sorted(Comparator.comparing(AvailableTimeSlot::getStartTime))
                 .toList();
     }
@@ -497,5 +500,71 @@ public class WeeklyScheduleService {
         if (java.time.Duration.between(startHour, endHour).toHours() < 1) {
             throw new BusinessException("O intervalo mínimo é de 1 hora");
         }
+    }
+
+    private void validateLunchRange(
+            LocalTime startHour,
+            LocalTime endHour,
+            LocalTime lunchStart,
+            LocalTime lunchEnd) {
+        if ((lunchStart == null) != (lunchEnd == null)) {
+            throw new BusinessException("Informe o início e o fim do almoço juntos");
+        }
+
+        if (lunchStart == null) {
+            return;
+        }
+
+        if (lunchStart.getMinute() != 0 || lunchEnd.getMinute() != 0) {
+            throw new BusinessException("Os horários devem ser configurados em horas cheias");
+        }
+
+        if (!lunchEnd.isAfter(lunchStart)) {
+            throw new BusinessException("O fim do almoço deve ser maior que o início do almoço");
+        }
+
+        if (!lunchStart.isAfter(startHour) || !lunchEnd.isBefore(endHour)) {
+            throw new BusinessException("O almoço deve ficar dentro do horário de atendimento");
+        }
+    }
+
+    private void validateLunchDoesNotConflictWithAppointments(
+            LocalTime lunchStart,
+            LocalTime lunchEnd,
+            List<Appointment> activeAppointments) {
+        if (lunchStart == null || lunchEnd == null) {
+            return;
+        }
+
+        for (Appointment appointment : activeAppointments) {
+            LocalTime appointmentStart = appointment.getAppointmentTime();
+            LocalTime appointmentEnd = appointmentStart.plusMinutes(SLOT_DURATION_MINUTES);
+
+            if (appointmentStart.isBefore(lunchEnd) && appointmentEnd.isAfter(lunchStart)) {
+                throw new BusinessException("Existem agendamentos ativos no intervalo do almoço informado");
+            }
+        }
+    }
+
+    private boolean isSlotWithinWorkingWindow(WeeklySchedule schedule, LocalTime startTime) {
+        LocalTime slotEnd = startTime.plusMinutes(SLOT_DURATION_MINUTES);
+        if (slotEnd.isAfter(schedule.getEndHour())) {
+            return false;
+        }
+
+        return !overlapsLunch(startTime, slotEnd, schedule);
+    }
+
+    private boolean overlapsLunch(LocalTime slotStart, LocalTime slotEnd, WeeklySchedule schedule) {
+        if (schedule.getLunchStart() == null || schedule.getLunchEnd() == null) {
+            return false;
+        }
+
+        return slotStart.isBefore(schedule.getLunchEnd())
+                && slotEnd.isAfter(schedule.getLunchStart());
+    }
+
+    private LocalTime parseOptionalTime(String value) {
+        return value == null || value.isBlank() ? null : LocalTime.parse(value);
     }
 }

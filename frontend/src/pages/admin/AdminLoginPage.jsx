@@ -15,7 +15,8 @@ export function AdminLoginPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const sessionExpired = new URLSearchParams(location.search).get("expired");
+  const sessionExpired =
+    new URLSearchParams(location.search).get("expired") === "true";
 
   useEffect(() => {
     if (sessionExpired) {
@@ -25,7 +26,7 @@ export function AdminLoginPage() {
         description: "Faça login novamente para continuar.",
       });
 
-      window.history.replaceState({}, document.title, "/admin/login");
+      window.history.replaceState({}, document.title, "/barbeiro/login");
     }
   }, [sessionExpired, showToast]);
 

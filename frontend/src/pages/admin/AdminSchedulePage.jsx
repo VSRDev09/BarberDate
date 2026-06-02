@@ -15,6 +15,8 @@ function buildDrafts(days) {
       {
         startHour: formatTime(day.startHour),
         endHour: formatTime(day.endHour),
+        lunchStart: formatTime(day.lunchStart),
+        lunchEnd: formatTime(day.lunchEnd),
         isOpen: !day.dayOff,
       },
     ]),
@@ -79,6 +81,8 @@ export function AdminSchedulePage() {
           dayOff: false,
           startHour: draft.startHour,
           endHour: draft.endHour,
+          lunchStart: draft.lunchStart || null,
+          lunchEnd: draft.lunchEnd || null,
         }
       : {
           dayOfWeek,
@@ -274,6 +278,8 @@ export function AdminSchedulePage() {
                               : {
                                   startHour: '',
                                   endHour: '',
+                                  lunchStart: '',
+                                  lunchEnd: '',
                                 }),
                           },
                         }))
@@ -290,7 +296,7 @@ export function AdminSchedulePage() {
 
                 {isDayOpen ? (
                   <>
-                    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <div className="mt-6 grid gap-4 lg:grid-cols-2">
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
                           Início
@@ -314,6 +320,66 @@ export function AdminSchedulePage() {
                                 ],
 
                                 startHour:
+                                  event.target.value,
+                              },
+                            }))
+                          }
+                          />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
+                          Fim do almoço
+                        </label>
+
+                        <input
+                          type="time"
+                          step="3600"
+                          className="input-shell"
+                          value={
+                            drafts[day.dayOfWeek]
+                              ?.lunchEnd || ''
+                          }
+                          onChange={(event) =>
+                            setDrafts((current) => ({
+                              ...current,
+
+                              [day.dayOfWeek]: {
+                                ...current[
+                                  day.dayOfWeek
+                                ],
+
+                                lunchEnd:
+                                  event.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
+                          Início do almoço
+                        </label>
+
+                        <input
+                          type="time"
+                          step="3600"
+                          className="input-shell"
+                          value={
+                            drafts[day.dayOfWeek]
+                              ?.lunchStart || ''
+                          }
+                          onChange={(event) =>
+                            setDrafts((current) => ({
+                              ...current,
+
+                              [day.dayOfWeek]: {
+                                ...current[
+                                  day.dayOfWeek
+                                ],
+
+                                lunchStart:
                                   event.target.value,
                               },
                             }))
