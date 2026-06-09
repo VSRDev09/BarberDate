@@ -73,6 +73,7 @@ export function AdminDashboardPage() {
       icon: Users,
       label: "Agendamentos",
       value: dashboard?.totalWeekAppointments ?? 0,
+      to: "/agendamentos/semana-atual",
     },
     {
       icon: Phone,
@@ -99,9 +100,8 @@ export function AdminDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => {
           const Icon = metric.icon;
-
-          return (
-            <CardShell key={metric.label}>
+          const cardContent = (
+            <>
               <div className="flex items-center gap-3 min-w-0">
                 <div className="shrink-0 rounded-2xl border border-amber-300/20 bg-amber-300/8 p-3 text-amber-300">
                   <Icon className="h-5 w-5" />
@@ -114,8 +114,20 @@ export function AdminDashboardPage() {
               <p className="mt-5 font-display text-5xl text-[#f8efcf]">
                 {metric.value}
               </p>
-            </CardShell>
+            </>
           );
+
+          if (metric.to) {
+            return (
+              <Link key={metric.label} to={metric.to} className="block cursor-pointer">
+                <CardShell className="h-full transition hover:-translate-y-0.5 hover:border-amber-300/25">
+                  {cardContent}
+                </CardShell>
+              </Link>
+            );
+          }
+
+          return <CardShell key={metric.label}>{cardContent}</CardShell>;
         })}
       </div>
 

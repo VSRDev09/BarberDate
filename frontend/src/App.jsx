@@ -6,6 +6,7 @@ import { LandingPage } from './pages/LandingPage.jsx'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage.jsx'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.jsx'
 import { AdminSchedulePage } from './pages/admin/AdminSchedulePage.jsx'
+import { AdminWeeklyAppointmentsPage } from './pages/admin/AdminWeeklyAppointmentsPage.jsx'
 import { PdfPreviewPage } from './pages/admin/PdfPreviewPage.jsx'
 import { ClientBookingPage } from './pages/client/ClientBookingPage.jsx'
 import { ClientHistoryPage } from './pages/client/ClientHistoryPage.jsx'
@@ -30,6 +31,16 @@ function App() {
           <Route path="painel" element={<AdminDashboardPage />} />
           <Route path="agenda" element={<AdminSchedulePage />} />
           <Route path="pdf-preview" element={<PdfPreviewPage />} />
+        </Route>
+        <Route
+          path="/agendamentos/semana-atual"
+          element={
+            <ProtectedRoute>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminWeeklyAppointmentsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

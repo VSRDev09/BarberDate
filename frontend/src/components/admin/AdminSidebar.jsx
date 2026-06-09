@@ -1,5 +1,6 @@
 import {
   CalendarRange,
+  CalendarClock,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -9,6 +10,7 @@ import { BrandMark } from '../shared/BrandMark.jsx'
 
 const navItems = [
   { to: '/admin/painel', label: 'Painel Admin', icon: LayoutDashboard },
+  { to: '/agendamentos/semana-atual', label: 'Agendamentos da semana', icon: CalendarClock },
   { to: '/admin/agenda', label: 'Agenda Semanal', icon: CalendarRange },
   { to: '/admin/pdf-preview', label: 'PDF Preview', icon: FileText },
 ]

@@ -102,12 +102,15 @@ public class AppointmentService {
             throw new UnauthorizedActionException("Você só pode cancelar seus próprios agendamentos");
         }
 
-        appointment.setStatus(AppointmentStatus.CANCELLED);
-        appointment.setCancelledAt(LocalDateTime.now());
-        appointment.getSlot().setAvailable(true);
+        cancelAppointmentInternal(appointment);
+    }
 
-        appointmentRepository.save(appointment);
-        availableTimeSlotRepository.save(appointment.getSlot());
+    @Transactional
+    public void cancelAppointmentByAdmin(Long appointmentId) {
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+            .orElseThrow(() -> new ResourceNotFoundException("Agendamento não encontrado"));
+
+        cancelAppointmentInternal(appointment);
     }
 
     @Transactional
@@ -238,5 +241,18 @@ public class AppointmentService {
         }
         return normalized.substring(0, 1).toUpperCase(Locale.forLanguageTag("pt-BR"))
             + normalized.substring(1);
+    }
+
+    private void cancelAppointmentInternal(Appointment appointment) {
+        if (appointment.getStatus() == AppointmentStatus.CANCELLED) {
+            throw new BusinessException("Este agendamento já foi cancelado");
+        }
+
+        appointment.setStatus(AppointmentStatus.CANCELLED);
+        appointment.setCancelledAt(LocalDateTime.now());
+        appointment.getSlot().setAvailable(true);
+
+        appointmentRepository.save(appointment);
+        availableTimeSlotRepository.save(appointment.getSlot());
     }
 }
