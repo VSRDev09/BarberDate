@@ -329,36 +329,6 @@ export function AdminSchedulePage() {
 
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
-                          Fim do almoço
-                        </label>
-
-                        <input
-                          type="time"
-                          step="3600"
-                          className="input-shell"
-                          value={
-                            drafts[day.dayOfWeek]
-                              ?.lunchEnd || ''
-                          }
-                          onChange={(event) =>
-                            setDrafts((current) => ({
-                              ...current,
-
-                              [day.dayOfWeek]: {
-                                ...current[
-                                  day.dayOfWeek
-                                ],
-
-                                lunchEnd:
-                                  event.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
                           Início do almoço
                         </label>
 
@@ -380,6 +350,36 @@ export function AdminSchedulePage() {
                                 ],
 
                                 lunchStart:
+                                  event.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#f6e8c2]">
+                          Fim do almoço
+                        </label>
+
+                        <input
+                          type="time"
+                          step="3600"
+                          className="input-shell"
+                          value={
+                            drafts[day.dayOfWeek]
+                              ?.lunchEnd || ''
+                          }
+                          onChange={(event) =>
+                            setDrafts((current) => ({
+                              ...current,
+
+                              [day.dayOfWeek]: {
+                                ...current[
+                                  day.dayOfWeek
+                                ],
+
+                                lunchEnd:
                                   event.target.value,
                               },
                             }))
